@@ -25,7 +25,12 @@ function fastJsonFormat(input, indent = '  ') {
 
   const s = String(input);
   const n = s.length;
-  const out = [];
+  
+  // Pre-allocate array with estimated size to reduce resizing
+  const estimatedSize = Math.floor(n * 1.2);
+  const out = new Array(estimatedSize);
+  let outIndex = 0;
+  
   let level = 0;
   let inString = false;
   let i = 0;
@@ -34,7 +39,7 @@ function fastJsonFormat(input, indent = '  ') {
   const indents = [''];
   const getIndent = (k) => {
     if (indents[k] !== undefined) return indents[k];
-    // Build incrementally from the last known indent.
+    // Build all indents up to k at once
     let cur = indents[indents.length - 1];
     for (let j = indents.length; j <= k; j++) {
       cur += indent;
@@ -43,80 +48,105 @@ function fastJsonFormat(input, indent = '  ') {
     return indents[k];
   };
 
-  // Check if quote at position `pos` is escaped: count trailing backslashes before it.
-  const isEscapedQuote = (pos) => {
-    let backslashes = 0, j = pos - 1;
-    while (j >= 0 && s.charCodeAt(j) === 92) { // 92 = '\'
-      backslashes++; j--;
+  // Character codes for performance
+  const QUOTE = 34;      // "
+  const BACKSLASH = 92;  // \
+  const OPEN_BRACE = 123; // {
+  const CLOSE_BRACE = 125; // }
+  const OPEN_BRACKET = 91; // [
+  const CLOSE_BRACKET = 93; // ]
+  const COMMA = 44; // ,
+  const COLON = 58; // :
+  const SPACE = 32; // ' '
+  const TAB = 9;    // '\t'
+  const NEWLINE = 10; // '\n'
+  const CARRIAGE_RETURN = 13; // '\r'
+
+  // Inline helper to count backslashes
+  const countBackslashes = (pos) => {
+    let count = 0;
+    let j = pos - 1;
+    while (j >= 0 && s.charCodeAt(j) === BACKSLASH) {
+      count++;
+      j--;
     }
-    return (backslashes & 1) === 1; // odd => escaped
+    return count;
   };
 
   while (i < n) {
-    const ch = s[i];
+    const charCode = s.charCodeAt(i);
 
     if (inString) {
-      out.push(ch);
-      if (ch === '"' && !isEscapedQuote(i)) inString = false;
+      out[outIndex++] = s[i];
+      if (charCode === QUOTE && (countBackslashes(i) & 1) === 0) {
+        inString = false;
+      }
       i++;
       continue;
     }
 
-    switch (ch) {
-      case '"':
+    switch (charCode) {
+      case QUOTE:
         inString = true;
-        out.push(ch);
+        out[outIndex++] = s[i];
         break;
 
-      case '{':
-      case '[':
-        out.push(ch, '\n', getIndent(level + 1));
+      case OPEN_BRACE:
+      case OPEN_BRACKET:
+        out[outIndex++] = s[i];
+        out[outIndex++] = '\n';
+        out[outIndex++] = getIndent(level + 1);
         level++;
         break;
 
-      case '}':
-      case ']':
+      case CLOSE_BRACE:
+      case CLOSE_BRACKET:
         level = level > 0 ? level - 1 : 0;
+        
         // Check if this is an empty object/array
-        // Pattern: last 3 elements are ['{' or '[', '\n', whitespace-only-string]
-        const expectedOpen = ch === '}' ? '{' : '[';
-        if (out.length >= 3 &&
-            out[out.length - 3] === expectedOpen &&
-            out[out.length - 2] === '\n' &&
-            typeof out[out.length - 1] === 'string' &&
-            out[out.length - 1].trim() === '') {
+        const expectedOpen = charCode === CLOSE_BRACE ? '{' : '[';
+        if (outIndex >= 3 &&
+            out[outIndex - 3] === expectedOpen &&
+            out[outIndex - 2] === '\n' &&
+            typeof out[outIndex - 1] === 'string' &&
+            out[outIndex - 1].trim() === '') {
           // Empty object/array: remove the newline and indent
-          out.pop(); // remove indent
-          out.pop(); // remove newline
-          out.push(ch);
+          outIndex -= 2; // remove newline and indent
+          out[outIndex++] = s[i];
         } else {
-          out.push('\n', getIndent(level), ch);
+          out[outIndex++] = '\n';
+          out[outIndex++] = getIndent(level);
+          out[outIndex++] = s[i];
         }
         break;
 
-      case ',':
-        out.push(',', '\n', getIndent(level));
+      case COMMA:
+        out[outIndex++] = ',';
+        out[outIndex++] = '\n';
+        out[outIndex++] = getIndent(level);
         break;
 
-      case ':':
-        out.push(': ');
+      case COLON:
+        out[outIndex++] = ':';
+        out[outIndex++] = ' ';
         break;
 
-      // Skip extraneous whitespace outside strings
-      case ' ':
-      case '\t':
-      case '\n':
-      case '\r':
+      // Skip whitespace - no operation needed
+      case SPACE:
+      case TAB:
+      case NEWLINE:
+      case CARRIAGE_RETURN:
         break;
 
       default:
-        out.push(ch);
+        out[outIndex++] = s[i];
         break;
     }
     i++;
   }
 
-  return out.join('');
+  // Join only the used portion of the array
+  return out.slice(0, outIndex).join('');
 }
 
 module.exports = fastJsonFormat;
