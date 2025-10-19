@@ -1,0 +1,9 @@
+{
+  "name": "fast-json-format",
+  "version": "0.0.1",
+  "description": "Fast JSON formatting library",
+  "main": "src/index.js",
+  "keywords": ["json", "format", "fast", "json-format"],
+  "author": "Bruno Software Inc.",
+  "license": "MIT"
+}
