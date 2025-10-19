@@ -65,32 +65,28 @@ Performance improvements are welcome :)
 
 ```text
 ⚡ 100 KB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 100.2 KB
-   ├─ fastJsonFormat: 382 ops/sec ±5.40%
-   └─ JSON.stringify: 2,156 ops/sec ±8.13%
-
-   🏆 JSON.stringify is 5.65x faster than fastJsonFormat
+   Size: 100.5 KB
+   ├─ fastJsonFormat: 361 ops/sec ±8.04%
+   ├─ json-bigint: 674 ops/sec ±5.84%
+   └─ JSON.stringify: 2,437 ops/sec ±0.48%
 
 ⚡ 1 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 1024.2 KB
-   ├─ fastJsonFormat: 28 ops/sec ±6.97%
-   └─ JSON.stringify: 231 ops/sec ±1.16%
-
-   🏆 JSON.stringify is 8.25x faster than fastJsonFormat
+   Size: 1024.5 KB
+   ├─ fastJsonFormat: 34 ops/sec ±1.70%
+   ├─ json-bigint: 67 ops/sec ±1.47%
+   └─ JSON.stringify: 234 ops/sec ±1.27%
 
 ⚡ 5 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 5120.1 KB
-   ├─ fastJsonFormat: 5 ops/sec ±2.87%
-   └─ JSON.stringify: 43 ops/sec ±4.72%
-
-   🏆 JSON.stringify is 7.98x faster than fastJsonFormat
+   Size: 5120.5 KB
+   ├─ fastJsonFormat: 6 ops/sec ±4.83%
+   ├─ json-bigint: 13 ops/sec ±2.37%
+   └─ JSON.stringify: 46 ops/sec ±2.13%
 
 ⚡ 10 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    Size: 10240.5 KB
-   ├─ fastJsonFormat: 3 ops/sec ±7.90%
-   └─ JSON.stringify: 23 ops/sec ±0.32%
-
-   🏆 JSON.stringify is 8.99x faster than fastJsonFormat
+   ├─ fastJsonFormat: 2 ops/sec ±9.87%
+   ├─ json-bigint: 6 ops/sec ±1.45%
+   └─ JSON.stringify: 24 ops/sec ±0.17%
 ```
 
 ## Testing

@@ -2,6 +2,7 @@ const Benchmark = require('benchmark');
 const { faker } = require('@faker-js/faker');
 const chalk = require('chalk');
 const fastJsonFormat = require('./src/index.js');
+const JSONbig = require('json-bigint');
 
 /**
  * Generates a nested JSON string of approximately the target size
@@ -74,7 +75,7 @@ const testSizes = [
 ];
 
 console.log('\n' + chalk.bold.cyan('🚀 Fast JSON Format Benchmark') + '\n');
-console.log(chalk.gray('⚡ Comparing ') + chalk.yellow('fastJsonFormat()') + chalk.gray(' vs ') + chalk.yellow('JSON.stringify(JSON.parse(), null, 2)') + '\n');
+console.log(chalk.gray('⚡ Comparing ') + chalk.yellow('fastJsonFormat()') + chalk.gray(' vs ') + chalk.yellow('JSON.stringify(JSON.parse())') + chalk.gray(' vs ') + chalk.yellow('json-bigint') + '\n');
 console.log(chalk.bold.blue('📊 Generating test data...') + '\n');
 
 const testCases = testSizes.map(size => {
@@ -97,9 +98,14 @@ testCases.forEach(testCase => {
   
   const suite = new Benchmark.Suite();
   
+  const results = [];
+  
   suite
     .add('fastJsonFormat', function() {
       fastJsonFormat(testCase.data, '  ');
+    })
+    .add('json-bigint', function() {
+      JSONbig.stringify(JSONbig.parse(testCase.data), null, 2);
     })
     .add('JSON.stringify', function() {
       JSON.stringify(JSON.parse(testCase.data), null, 2);
@@ -109,18 +115,17 @@ testCases.forEach(testCase => {
       const ops = event.target.hz.toLocaleString('en-US', { maximumFractionDigits: 0 });
       const margin = event.target.stats.rme.toFixed(2);
       
-      if (name === 'fastJsonFormat') {
-        console.log(chalk.gray('   ├─ ') + chalk.green('fastJsonFormat') + chalk.gray(': ') + chalk.bold.white(ops) + chalk.gray(' ops/sec ±' + margin + '%'));
-      } else {
-        console.log(chalk.gray('   └─ ') + chalk.blue('JSON.stringify') + chalk.gray(': ') + chalk.bold.white(ops) + chalk.gray(' ops/sec ±' + margin + '%'));
-      }
+      results.push({ name, hz: event.target.hz });
+      
+      const symbol = results.length === 1 ? '├─' : results.length === 2 ? '├─' : '└─';
+      const color = name === 'fastJsonFormat' ? chalk.green : name === 'JSON.stringify' ? chalk.blue : chalk.magenta;
+      
+      console.log(chalk.gray(`   ${symbol} `) + color(name) + chalk.gray(': ') + chalk.bold.white(ops) + chalk.gray(' ops/sec ±' + margin + '%'));
     })
     .on('complete', function() {
       const fastest = this.filter('fastest')[0];
       const slowest = this.filter('slowest')[0];
       const speedup = fastest.hz / slowest.hz;
-      
-      console.log('\n' + chalk.gray('   🏆 ') + chalk.bold.green(fastest.name) + chalk.gray(' is ') + chalk.bold.red(`${speedup.toFixed(2)}x`) + chalk.gray(' faster than ') + chalk.yellow(slowest.name));
     })
     .run({ 'async': false });
 });
