@@ -11,9 +11,12 @@
   ],
   "author": "Bruno Software Inc.",
   "scripts": {
+    "benchmark": "node benchmark.js",
     "test": "jest tests/*.spec.js"
   },
   "devDependencies": {
+    "@faker-js/faker": "^9.9.0",
+    "benchmark": "^2.1.4",
     "jest": "^30.2.0"
   },
   "license": "MIT"
