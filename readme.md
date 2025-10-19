@@ -64,29 +64,12 @@ JSON.stringify is inherently faster (as it’s native and C++-optimized)
 Performance improvements are welcome :)
 
 ```text
-⚡ 100 KB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 100.2 KB
-   ├─ fastJsonFormat: 1,030 ops/sec ±2.61%
-   ├─ json-bigint: 711 ops/sec ±0.61%
-   └─ JSON.stringify: 2,443 ops/sec ±0.55%
-
-⚡ 1 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 1024.3 KB
-   ├─ fastJsonFormat: 90 ops/sec ±6.33%
-   ├─ json-bigint: 69 ops/sec ±0.33%
-   └─ JSON.stringify: 236 ops/sec ±3.07%
-
-⚡ 5 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 5120.3 KB
-   ├─ fastJsonFormat: 15 ops/sec ±3.43%
-   ├─ json-bigint: 13 ops/sec ±1.44%
-   └─ JSON.stringify: 47 ops/sec ±0.45%
-
-⚡ 10 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 10240.3 KB
-   ├─ fastJsonFormat: 7 ops/sec ±5.44%
-   ├─ json-bigint: 6 ops/sec ±1.34%
-   └─ JSON.stringify: 23 ops/sec ±0.95%
+Size         │ fast-json-format     │ json-bigint          │ JSON.stringify      
+─────────────┼──────────────────────┼──────────────────────┼─────────────────────
+100 KB       │ 1060 ops/sec         │ 679 ops/sec          │ 2394 ops/sec        
+1 MB         │ 90 ops/sec           │ 68 ops/sec           │ 223 ops/sec         
+5 MB         │ 15 ops/sec           │ 13 ops/sec           │ 48 ops/sec          
+10 MB        │ 7 ops/sec            │ 6 ops/sec            │ 23 ops/sec    
 ```
 
 ## Testing

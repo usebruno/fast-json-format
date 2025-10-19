@@ -92,6 +92,9 @@ const testCases = testSizes.map(size => {
 
 console.log('\n' + chalk.bold.magenta('🏁 Running benchmarks...') + '\n');
 
+// Store all results for summary table
+const allResults = [];
+
 testCases.forEach(testCase => {
   console.log('\n' + chalk.bold.yellow(`⚡ ${testCase.name}`) + ' ' + chalk.gray('━'.repeat(50)));
   console.log(chalk.gray('   Size: ') + chalk.cyan(`${(testCase.actualSize / 1024).toFixed(1)} KB`));
@@ -118,7 +121,7 @@ testCases.forEach(testCase => {
       results.push({ name, hz: event.target.hz });
       
       const symbol = results.length === 1 ? '├─' : results.length === 2 ? '├─' : '└─';
-      const color = name === 'fastJsonFormat' ? chalk.green : name === 'JSON.stringify' ? chalk.blue : chalk.magenta;
+      const color = name === 'fast-json-format' ? chalk.green : name === 'JSON.stringify' ? chalk.blue : chalk.magenta;
       
       console.log(chalk.gray(`   ${symbol} `) + color(name) + chalk.gray(': ') + chalk.bold.white(ops) + chalk.gray(' ops/sec ±' + margin + '%'));
     })
@@ -126,6 +129,48 @@ testCases.forEach(testCase => {
       const fastest = this.filter('fastest')[0];
       const slowest = this.filter('slowest')[0];
       const speedup = fastest.hz / slowest.hz;
+      
+      // Store results for summary
+      allResults.push({
+        size: testCase.name,
+        results: results
+      });
     })
     .run({ 'async': false });
 });
+
+// Display summary table
+console.log('\n\n' + chalk.bold.cyan('📊 Summary Table') + '\n');
+
+// Build table header
+const libs = ['fast-json-format', 'json-bigint', 'JSON.stringify'];
+const colWidths = { size: 12, lib: 20 };
+
+// Header
+console.log(
+  chalk.bold.white('Size'.padEnd(colWidths.size)) + ' │ ' +
+  chalk.bold.green('fast-json-format'.padEnd(colWidths.lib)) + ' │ ' +
+  chalk.bold.magenta('json-bigint'.padEnd(colWidths.lib)) + ' │ ' +
+  chalk.bold.blue('JSON.stringify'.padEnd(colWidths.lib))
+);
+console.log('─'.repeat(colWidths.size) + '─┼─' + '─'.repeat(colWidths.lib) + '─┼─' + '─'.repeat(colWidths.lib) + '─┼─' + '─'.repeat(colWidths.lib));
+
+// Rows
+allResults.forEach(result => {
+  const fastJson = result.results.find(r => r.name === 'fast-json-format');
+  const jsonBigint = result.results.find(r => r.name === 'json-bigint');
+  const jsonStringify = result.results.find(r => r.name === 'JSON.stringify');
+  
+  const fastJsonOps = fastJson ? fastJson.hz.toFixed(0) : 'N/A';
+  const jsonBigintOps = jsonBigint ? jsonBigint.hz.toFixed(0) : 'N/A';
+  const jsonStringifyOps = jsonStringify ? jsonStringify.hz.toFixed(0) : 'N/A';
+  
+  console.log(
+    chalk.cyan(result.size.padEnd(colWidths.size)) + ' │ ' +
+    chalk.white((fastJsonOps + ' ops/sec').padEnd(colWidths.lib)) + ' │ ' +
+    chalk.white((jsonBigintOps + ' ops/sec').padEnd(colWidths.lib)) + ' │ ' +
+    chalk.white((jsonStringifyOps + ' ops/sec').padEnd(colWidths.lib))
+  );
+});
+
+console.log('\n' + chalk.gray('Note: Higher ops/sec = better performance') + '\n');
