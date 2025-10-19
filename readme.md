@@ -65,28 +65,28 @@ Performance improvements are welcome :)
 
 ```text
 ⚡ 100 KB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 100.5 KB
-   ├─ fastJsonFormat: 361 ops/sec ±8.04%
-   ├─ json-bigint: 674 ops/sec ±5.84%
-   └─ JSON.stringify: 2,437 ops/sec ±0.48%
+   Size: 100.2 KB
+   ├─ fastJsonFormat: 1,030 ops/sec ±2.61%
+   ├─ json-bigint: 711 ops/sec ±0.61%
+   └─ JSON.stringify: 2,443 ops/sec ±0.55%
 
 ⚡ 1 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 1024.5 KB
-   ├─ fastJsonFormat: 34 ops/sec ±1.70%
-   ├─ json-bigint: 67 ops/sec ±1.47%
-   └─ JSON.stringify: 234 ops/sec ±1.27%
+   Size: 1024.3 KB
+   ├─ fastJsonFormat: 90 ops/sec ±6.33%
+   ├─ json-bigint: 69 ops/sec ±0.33%
+   └─ JSON.stringify: 236 ops/sec ±3.07%
 
 ⚡ 5 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 5120.5 KB
-   ├─ fastJsonFormat: 6 ops/sec ±4.83%
-   ├─ json-bigint: 13 ops/sec ±2.37%
-   └─ JSON.stringify: 46 ops/sec ±2.13%
+   Size: 5120.3 KB
+   ├─ fastJsonFormat: 15 ops/sec ±3.43%
+   ├─ json-bigint: 13 ops/sec ±1.44%
+   └─ JSON.stringify: 47 ops/sec ±0.45%
 
 ⚡ 10 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Size: 10240.5 KB
-   ├─ fastJsonFormat: 2 ops/sec ±9.87%
-   ├─ json-bigint: 6 ops/sec ±1.45%
-   └─ JSON.stringify: 24 ops/sec ±0.17%
+   Size: 10240.3 KB
+   ├─ fastJsonFormat: 7 ops/sec ±5.44%
+   ├─ json-bigint: 6 ops/sec ±1.34%
+   └─ JSON.stringify: 23 ops/sec ±0.95%
 ```
 
 ## Testing
