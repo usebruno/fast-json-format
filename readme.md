@@ -1,6 +1,6 @@
 # fast-json-format
 
-A JSON formatting library that pretty-prints JSON like strings
+A blazing fast JSON formatting library that pretty-prints JSON like strings
 
 ## Why?
 

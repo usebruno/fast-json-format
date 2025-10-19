@@ -75,7 +75,7 @@ const testSizes = [
 ];
 
 console.log('\n' + chalk.bold.cyan('🚀 Fast JSON Format Benchmark') + '\n');
-console.log(chalk.gray('⚡ Comparing ') + chalk.yellow('fastJsonFormat()') + chalk.gray(' vs ') + chalk.yellow('JSON.stringify(JSON.parse())') + chalk.gray(' vs ') + chalk.yellow('json-bigint') + '\n');
+console.log(chalk.gray('⚡ Comparing ') + chalk.yellow('fast-json-format') + chalk.gray(' vs ') + chalk.yellow('JSON.stringify(JSON.parse())') + chalk.gray(' vs ') + chalk.yellow('json-bigint') + '\n');
 console.log(chalk.bold.blue('📊 Generating test data...') + '\n');
 
 const testCases = testSizes.map(size => {
@@ -101,7 +101,7 @@ testCases.forEach(testCase => {
   const results = [];
   
   suite
-    .add('fastJsonFormat', function() {
+    .add('fast-json-format', function() {
       fastJsonFormat(testCase.data, '  ');
     })
     .add('json-bigint', function() {
