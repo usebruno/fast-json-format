@@ -3,7 +3,18 @@
   "version": "0.0.1",
   "description": "Fast JSON formatting library",
   "main": "src/index.js",
-  "keywords": ["json", "format", "fast", "json-format"],
+  "keywords": [
+    "json",
+    "format",
+    "fast",
+    "json-format"
+  ],
   "author": "Bruno Software Inc.",
+  "scripts": {
+    "test": "jest tests/*.spec.js"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
+  },
   "license": "MIT"
 }
