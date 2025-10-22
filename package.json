@@ -12,7 +12,7 @@
   "author": "Bruno Software Inc.",
   "scripts": {
     "benchmark": "node benchmark.js",
-    "test": "jest tests/*.spec.js"
+    "test": "jest"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.9.0",
