@@ -1,15 +1,23 @@
 /**
  * Pretty-prints a JSON-like string without parsing.
- * Fast path: chunked copying, fast string scan, lookahead for empty {} / [].
+ * Optimized: static lookup tables, fewer charCodeAt() calls, and no per-call setup.
  *
  * @param {string} input
  * @param {string} indent
  * @returns {string}
  */
+
+// --- ✅ static lookup tables created ONCE ---
+const STRUCTURAL = new Uint8Array(128);
+const WHITESPACE = new Uint8Array(128);
+(() => {
+  [34, 44, 58, 91, 93, 123, 125].forEach((c) => (STRUCTURAL[c] = 1)); // " , : [ ] { }
+  [9, 10, 13, 32].forEach((c) => (WHITESPACE[c] = 1)); // \t \n \r space
+})();
+
 function fastJsonFormat(input, indent = '  ') {
   if (input === undefined) return '';
 
-  // For non-string input, fall back to JSON.stringify behavior.
   if (typeof input !== 'string') {
     try {
       return JSON.stringify(input, null, indent);
@@ -20,19 +28,15 @@ function fastJsonFormat(input, indent = '  ') {
 
   const s = String(input);
   const n = s.length;
-
-  // Fast minify-like path when indent is empty.
   const useIndent = typeof indent === 'string' ? indent : '  ';
   const pretty = useIndent.length > 0;
 
-  // Output as array of chunks (strings). Much faster than char-by-char.
   const out = [];
   let level = 0;
 
-  // Cached indents.
   const indents = [''];
   const getIndent = (k) => {
-    if (!pretty) return ''; // minify fast-path
+    if (!pretty) return '';
     if (indents[k] !== undefined) return indents[k];
     let cur = indents[indents.length - 1];
     for (let j = indents.length; j <= k; j++) {
@@ -42,119 +46,61 @@ function fastJsonFormat(input, indent = '  ') {
     return indents[k];
   };
 
-  // Character codes
-  const QUOTE = 34;        // "
-  const BACKSLASH = 92;    // \
-  const OPEN_BRACE = 123;  // {
-  const CLOSE_BRACE = 125; // }
-  const OPEN_BRACKET = 91; // [
-  const CLOSE_BRACKET = 93;// ]
-  const COMMA = 44;        // ,
-  const COLON = 58;        // :
-  const SPACE = 32;        // ' '
-  const TAB = 9;           // '\t'
-  const NEWLINE = 10;      // '\n'
-  const CR = 13;           // '\r'
+  const QUOTE = 34;
+  const BACKSLASH = 92;
+  const OPEN_BRACE = 123;
+  const CLOSE_BRACE = 125;
+  const OPEN_BRACKET = 91;
+  const CLOSE_BRACKET = 93;
+  const COMMA = 44;
+  const COLON = 58;
 
-  const isSpaceCode = (c) =>
-    c === SPACE || c === TAB || c === NEWLINE || c === CR;
-
-  // Skip whitespace starting at idx; return first non-space index (<= n)
-  const skipWS = (idx) => {
-    while (idx < n && isSpaceCode(s.charCodeAt(idx))) idx++;
-    return idx;
-  };
-
-  // Scan a JSON string starting at index of opening quote `i` (s[i] === '"').
-  // Returns index just after the closing quote and pushes the entire slice.
   const scanString = (i) => {
     let j = i + 1;
     while (j < n) {
       const c = s.charCodeAt(j);
-      if (c === QUOTE) { // end of string
+      if (c === QUOTE) {
         j++;
         out.push(s.slice(i, j));
         return j;
       }
       if (c === BACKSLASH) {
-        // Handle escape: \" \\ \/ \b \f \n \r \t or \uXXXX
         j++;
-        if (j < n && s.charCodeAt(j) === 117 /* 'u' */) {
-          // Skip 'u' + 4 hex digits if present
-          // (Keep it forgiving; don't validate hex strictly)
-          j += 5; // 'u' + 4 chars
-        } else {
-          j++; // skip the escaped char
-        }
+        if (j < n && s.charCodeAt(j) === 117) j += 5;
+        else j++;
         continue;
       }
       j++;
     }
-    // Unterminated: copy to end (forgiving)
     out.push(s.slice(i, n));
     return n;
   };
 
-  // Copy a run of non-structural, non-space characters starting at i.
-  // Stops at space or one of the structural chars ,:{}[]"
-  const scanAtom = (i) => {
-    let j = i;
-    scan: while (j < n) {
-      const c = s.charCodeAt(j);
-      switch (c) {
-        case SPACE:
-        case TAB:
-        case NEWLINE:
-        case CR:
-        case QUOTE:
-        case OPEN_BRACE:
-        case CLOSE_BRACE:
-        case OPEN_BRACKET:
-        case CLOSE_BRACKET:
-        case COMMA:
-        case COLON:
-          break scan;
-      }
-      j++;
-    }
-    if (j > i) out.push(s.slice(i, j));
-    return j;
-  };
-
   let i = 0;
-
   while (i < n) {
-    i = skipWS(i);
+    // 🔥 Faster inline skipWS (no per-call function)
+    while (i < n && WHITESPACE[s.charCodeAt(i)]) i++;
     if (i >= n) break;
 
     const c = s.charCodeAt(i);
 
-    // Strings
     if (c === QUOTE) {
       i = scanString(i);
       continue;
     }
 
-    // Structural tokens
     if (c === OPEN_BRACE || c === OPEN_BRACKET) {
       const openCh = s[i];
-      const isBrace = c === OPEN_BRACE;
-      const closeCh = isBrace ? '}' : ']';
-
-      // Lookahead for empty {} or []: skip spaces to next significant char
-      let k = skipWS(i + 1);
+      const closeCh = c === OPEN_BRACE ? '}' : ']';
+      let k = i + 1;
+      while (k < n && WHITESPACE[s.charCodeAt(k)]) k++;
       if (k < n && s[k] === closeCh) {
-        // Emit {} / [] (no newline/indent)
         out.push(openCh, closeCh);
         i = k + 1;
         continue;
       }
-
-      // Non-empty: normal pretty formatting
       out.push(openCh);
-      if (pretty) {
-        out.push('\n', getIndent(level + 1));
-      }
+      if (pretty) out.push('\n', getIndent(level + 1));
       level++;
       i++;
       continue;
@@ -162,9 +108,7 @@ function fastJsonFormat(input, indent = '  ') {
 
     if (c === CLOSE_BRACE || c === CLOSE_BRACKET) {
       level = level > 0 ? level - 1 : 0;
-      if (pretty) {
-        out.push('\n', getIndent(level));
-      }
+      if (pretty) out.push('\n', getIndent(level));
       out.push(s[i]);
       i++;
       continue;
@@ -172,25 +116,27 @@ function fastJsonFormat(input, indent = '  ') {
 
     if (c === COMMA) {
       out.push(',');
-      if (pretty) {
-        out.push('\n', getIndent(level));
-      }
+      if (pretty) out.push('\n', getIndent(level));
       i++;
       continue;
     }
 
     if (c === COLON) {
-      if (pretty) {
-        out.push(':', ' ');
-      } else {
-        out.push(':');
-      }
+      if (pretty) out.push(':', ' ');
+      else out.push(':');
       i++;
       continue;
     }
 
-    // Outside strings & not structural: copy a whole run (numbers, literals, bigint suffix, identifiers)
-    i = scanAtom(i);
+    // 🔥 inline scanAtom (cached charCode)
+    let j = i;
+    while (j < n) {
+      const cj = s.charCodeAt(j);
+      if (STRUCTURAL[cj] || WHITESPACE[cj]) break;
+      j++;
+    }
+    if (j > i) out.push(s.slice(i, j));
+    i = j;
   }
 
   return out.join('');
