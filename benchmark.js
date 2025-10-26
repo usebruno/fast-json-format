@@ -3,6 +3,7 @@ const { faker } = require('@faker-js/faker');
 const chalk = require('chalk');
 const fastJsonFormat = require('./src/index.js');
 const JSONbig = require('json-bigint');
+const LosslessJSON = require('lossless-json');
 
 /**
  * Generates a nested JSON string of approximately the target size
@@ -75,7 +76,7 @@ const testSizes = [
 ];
 
 console.log('\n' + chalk.bold.cyan('🚀 Fast JSON Format Benchmark') + '\n');
-console.log(chalk.gray('⚡ Comparing ') + chalk.yellow('fast-json-format') + chalk.gray(' vs ') + chalk.yellow('JSON.stringify(JSON.parse())') + chalk.gray(' vs ') + chalk.yellow('json-bigint') + '\n');
+console.log(chalk.gray('⚡ Comparing ') + chalk.yellow('fast-json-format') + chalk.gray(' vs ') + chalk.yellow('JSON.stringify(JSON.parse())') + chalk.gray(' vs ') + chalk.yellow('json-bigint') + chalk.gray(' vs ') + chalk.yellow('lossless-json') + '\n');
 console.log(chalk.bold.blue('📊 Generating test data...') + '\n');
 
 const testCases = testSizes.map(size => {
@@ -110,6 +111,9 @@ testCases.forEach(testCase => {
     .add('json-bigint', function() {
       JSONbig.stringify(JSONbig.parse(testCase.data), null, 2);
     })
+    .add('lossless-json', function() {
+      LosslessJSON.stringify(LosslessJSON.parse(testCase.data), null, 2);
+    })
     .add('JSON.stringify', function() {
       JSON.stringify(JSON.parse(testCase.data), null, 2);
     })
@@ -121,7 +125,7 @@ testCases.forEach(testCase => {
       results.push({ name, hz: event.target.hz });
       
       const symbol = results.length === 1 ? '├─' : results.length === 2 ? '├─' : '└─';
-      const color = name === 'fast-json-format' ? chalk.green : name === 'JSON.stringify' ? chalk.blue : chalk.magenta;
+      const color = name === 'fast-json-format' ? chalk.green : name === 'JSON.stringify' ? chalk.blue : name === 'json-bigint' ? chalk.magenta : chalk.yellow;
       
       console.log(chalk.gray(`   ${symbol} `) + color(name) + chalk.gray(': ') + chalk.bold.white(ops) + chalk.gray(' ops/sec ±' + margin + '%'));
     })
@@ -143,7 +147,7 @@ testCases.forEach(testCase => {
 console.log('\n\n' + chalk.bold.cyan('📊 Summary Table') + '\n');
 
 // Build table header
-const libs = ['fast-json-format', 'json-bigint', 'JSON.stringify'];
+const libs = ['fast-json-format', 'json-bigint', 'lossless-json', 'JSON.stringify'];
 const colWidths = { size: 12, lib: 20 };
 
 // Header
@@ -151,24 +155,28 @@ console.log(
   chalk.bold.white('Size'.padEnd(colWidths.size)) + ' │ ' +
   chalk.bold.green('fast-json-format'.padEnd(colWidths.lib)) + ' │ ' +
   chalk.bold.magenta('json-bigint'.padEnd(colWidths.lib)) + ' │ ' +
+  chalk.bold.yellow('lossless-json'.padEnd(colWidths.lib)) + ' │ ' +
   chalk.bold.blue('JSON.stringify'.padEnd(colWidths.lib))
 );
-console.log('─'.repeat(colWidths.size) + '─┼─' + '─'.repeat(colWidths.lib) + '─┼─' + '─'.repeat(colWidths.lib) + '─┼─' + '─'.repeat(colWidths.lib));
+console.log('─'.repeat(colWidths.size) + '─┼─' + '─'.repeat(colWidths.lib) + '─┼─' + '─'.repeat(colWidths.lib) + '─┼─' + '─'.repeat(colWidths.lib) + '─┼─' + '─'.repeat(colWidths.lib));
 
 // Rows
 allResults.forEach(result => {
   const fastJson = result.results.find(r => r.name === 'fast-json-format');
   const jsonBigint = result.results.find(r => r.name === 'json-bigint');
+  const losslessJson = result.results.find(r => r.name === 'lossless-json');
   const jsonStringify = result.results.find(r => r.name === 'JSON.stringify');
   
   const fastJsonOps = fastJson ? fastJson.hz.toFixed(0) : 'N/A';
   const jsonBigintOps = jsonBigint ? jsonBigint.hz.toFixed(0) : 'N/A';
+  const losslessJsonOps = losslessJson ? losslessJson.hz.toFixed(0) : 'N/A';
   const jsonStringifyOps = jsonStringify ? jsonStringify.hz.toFixed(0) : 'N/A';
   
   console.log(
     chalk.cyan(result.size.padEnd(colWidths.size)) + ' │ ' +
     chalk.white((fastJsonOps + ' ops/sec').padEnd(colWidths.lib)) + ' │ ' +
     chalk.white((jsonBigintOps + ' ops/sec').padEnd(colWidths.lib)) + ' │ ' +
+    chalk.white((losslessJsonOps + ' ops/sec').padEnd(colWidths.lib)) + ' │ ' +
     chalk.white((jsonStringifyOps + ' ops/sec').padEnd(colWidths.lib))
   );
 });
