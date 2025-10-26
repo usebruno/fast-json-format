@@ -1,6 +1,6 @@
 {
   "name": "fast-json-format",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fast JSON formatting library",
   "main": "src/index.js",
   "keywords": [
@@ -9,8 +9,14 @@
     "fast",
     "json-format"
   ],
+  "files": [
+    "src",
+    "package.json",
+    "readme.md"
+  ],
   "author": "Bruno Software Inc.",
   "scripts": {
+    "prepack": "npm run test",
     "benchmark": "node benchmark.js",
     "test": "jest tests/*.spec.js"
   },
