@@ -5,16 +5,58 @@ const WHITESPACE = new Uint8Array(128);
   [9, 10, 13, 32].forEach((c) => (WHITESPACE[c] = 1)); // \t \n \r space
 })();
 
+// High-performance Unicode decoding without regex
+function decodeUnicodeString(str) {
+  if (str.indexOf('\\u') === -1) return str;
+  let out = '';
+  const n = str.length;
+  for (let i = 0; i < n; i++) {
+    const ch = str.charCodeAt(i);
+    if (ch === 92 && str.charCodeAt(i + 1) === 117 && i + 5 < n) { // \u
+      const code = parseInt(str.substr(i + 2, 4), 16);
+      if (!isNaN(code)) {
+        // Handle surrogate pairs
+        if (code >= 0xd800 && code <= 0xdbff && i + 11 < n &&
+            str.charCodeAt(i + 6) === 92 && str.charCodeAt(i + 7) === 117) {
+          const low = parseInt(str.substr(i + 8, 4), 16);
+          if (!isNaN(low) && low >= 0xdc00 && low <= 0xdfff) {
+            out += String.fromCodePoint(((code - 0xd800) << 10) + (low - 0xdc00) + 0x10000);
+            i += 11;
+            continue;
+          }
+        }
+        out += String.fromCharCode(code);
+        i += 5;
+        continue;
+      }
+    }
+    out += str[i];
+  }
+  return out;
+}
+
+// High-performance JSON formatter
 function fastJsonFormat(input, indent = '  ') {
   if (input === undefined) return '';
   if (typeof input !== 'string') {
     try { return JSON.stringify(input, null, indent); } catch { return ''; }
   }
 
-  const s = String(input);
+  const s = input;
   const n = s.length;
   const pretty = typeof indent === 'string' && indent.length > 0;
-  const out = [];
+
+  // chunked output builder (avoids large Array.push overhead)
+  const CHUNK_SIZE = 1 << 16; // 64KB per chunk
+  const chunks = [];
+  let buffer = '';
+  const flush = () => { chunks.push(buffer); buffer = ''; };
+  const write = (x) => {
+    buffer += x;
+    if (buffer.length > CHUNK_SIZE) flush();
+  };
+
+  // precomputed indents
   const indents = [''];
   const getIndent = (k) => {
     if (!pretty) return '';
@@ -31,18 +73,8 @@ function fastJsonFormat(input, indent = '  ') {
         OPEN_BRACKET = 91, CLOSE_BRACKET = 93, COMMA = 44, COLON = 58;
 
   let i = 0, level = 0;
-  let decodeUnicode = s.indexOf('\\u') >= 0; // enable only if needed
-
-  const parseHex4 = (j) => {
-    const c1 = s.charCodeAt(j), c2 = s.charCodeAt(j + 1),
-          c3 = s.charCodeAt(j + 2), c4 = s.charCodeAt(j + 3);
-    const isHex = (x) => (x >= 48 && x <= 57) || (x >= 65 && x <= 70) || (x >= 97 && x <= 102);
-    if (!isHex(c1) || !isHex(c2) || !isHex(c3) || !isHex(c4)) return -1;
-    return ((c1 & 15) << 12) | ((c2 & 15) << 8) | ((c3 & 15) << 4) | (c4 & 15);
-  };
 
   while (i < n) {
-    // skip whitespace inline
     while (i < n && WHITESPACE[s.charCodeAt(i)]) i++;
     if (i >= n) break;
 
@@ -53,23 +85,23 @@ function fastJsonFormat(input, indent = '  ') {
       while (i < n) {
         const cc = s.charCodeAt(i);
         if (cc === QUOTE) { i++; break; }
-        if (cc === BACKSLASH) {
-          i++;
-          if (decodeUnicode && s[i] === 'u' && i + 4 < n) i += 5;
-          else i++;
-        } else i++;
+        if (cc === BACKSLASH) i += 2;
+        else i++;
       }
-      out.push(s.slice(start, i));
+      const inner = s.slice(start + 1, i - 1);
+      const decoded = decodeUnicodeString(inner);
+      write('"'); write(decoded); write('"');
       continue;
     }
 
     if (c === OPEN_BRACE || c === OPEN_BRACKET) {
-      const openCh = s[i], closeCh = c === OPEN_BRACE ? '}' : ']';
+      const openCh = s[i];
+      const closeCh = c === OPEN_BRACE ? '}' : ']';
       let k = i + 1;
       while (k < n && WHITESPACE[s.charCodeAt(k)]) k++;
-      if (k < n && s[k] === closeCh) { out.push(openCh + closeCh); i = k + 1; continue; }
-      out.push(openCh);
-      if (pretty) out.push('\n', getIndent(level + 1));
+      if (k < n && s[k] === closeCh) { write(openCh + closeCh); i = k + 1; continue; }
+      write(openCh);
+      if (pretty) { write('\n'); write(getIndent(level + 1)); }
       level++;
       i++;
       continue;
@@ -77,31 +109,32 @@ function fastJsonFormat(input, indent = '  ') {
 
     if (c === CLOSE_BRACE || c === CLOSE_BRACKET) {
       level = Math.max(0, level - 1);
-      if (pretty) out.push('\n', getIndent(level));
-      out.push(s[i++]);
+      if (pretty) { write('\n'); write(getIndent(level)); }
+      write(s[i++]);
       continue;
     }
 
     if (c === COMMA) {
-      out.push(',');
-      if (pretty) out.push('\n', getIndent(level));
+      write(',');
+      if (pretty) { write('\n'); write(getIndent(level)); }
       i++;
       continue;
     }
 
     if (c === COLON) {
-      out.push(pretty ? ': ' : ':');
+      if (pretty) write(': ');
+      else write(':');
       i++;
       continue;
     }
 
-    // atom (fast inline scan)
     const start = i;
     while (i < n && !STRUCTURAL[s.charCodeAt(i)] && !WHITESPACE[s.charCodeAt(i)]) i++;
-    out.push(s.slice(start, i));
+    write(s.slice(start, i));
   }
 
-  return out.join('');
+  if (buffer.length) chunks.push(buffer);
+  return chunks.join('');
 }
 
 module.exports = fastJsonFormat;
