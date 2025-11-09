@@ -64,12 +64,12 @@ JSON.stringify is inherently faster (as it’s native and C++-optimized)
 Performance improvements are welcome :)
 
 ```text
-Size         │ fast-json-format     │ json-bigint          │ JSON.stringify      
-─────────────┼──────────────────────┼──────────────────────┼─────────────────────
-100 KB       │ 1060 ops/sec         │ 679 ops/sec          │ 2394 ops/sec        
-1 MB         │ 90 ops/sec           │ 68 ops/sec           │ 223 ops/sec         
-5 MB         │ 15 ops/sec           │ 13 ops/sec           │ 48 ops/sec          
-10 MB        │ 7 ops/sec            │ 6 ops/sec            │ 23 ops/sec    
+Size         │ fast-json-format     │ json-bigint          │ lossless-json        │ JSON.stringify      
+─────────────┼──────────────────────┼──────────────────────┼──────────────────────┼─────────────────────
+100 KB       │ 1064 ops/sec         │ 712 ops/sec          │ 609 ops/sec          │ 2432 ops/sec        
+1 MB         │ 91 ops/sec           │ 65 ops/sec           │ 43 ops/sec           │ 238 ops/sec         
+5 MB         │ 15 ops/sec           │ 13 ops/sec           │ 6 ops/sec            │ 47 ops/sec          
+10 MB        │ 7 ops/sec            │ 7 ops/sec            │ 3 ops/sec            │ 23 ops/sec              
 ```
 
 ## Testing

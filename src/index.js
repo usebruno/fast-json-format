@@ -55,30 +55,72 @@ function fastJsonFormat(input, indent = '  ') {
   const COMMA = 44;
   const COLON = 58;
 
+  // --- Unicode helper functions from main branch ---
+  const isHexDigit = (code) =>
+    (code >= 48 && code <= 57) || // 0-9
+    (code >= 65 && code <= 70) || // A-F
+    (code >= 97 && code <= 102);  // a-f
+
+  const parseHex4 = (j) => {
+    if (j + 4 > n) return -1;
+    const c1 = s.charCodeAt(j);
+    const c2 = s.charCodeAt(j + 1);
+    const c3 = s.charCodeAt(j + 2);
+    const c4 = s.charCodeAt(j + 3);
+    if (!isHexDigit(c1) || !isHexDigit(c2) || !isHexDigit(c3) || !isHexDigit(c4)) {
+      return -1;
+    }
+    let val = 0;
+    val = c1 <= 57 ? c1 - 48 : (c1 <= 70 ? c1 - 55 : c1 - 87);
+    val = (val << 4) | (c2 <= 57 ? c2 - 48 : (c2 <= 70 ? c2 - 55 : c2 - 87));
+    val = (val << 4) | (c3 <= 57 ? c3 - 48 : (c3 <= 70 ? c3 - 55 : c3 - 87));
+    val = (val << 4) | (c4 <= 57 ? c4 - 48 : (c4 <= 70 ? c4 - 55 : c4 - 87));
+    return val;
+  };
+
+  // --- Unified scanString: fast path + Unicode decoding ---
   const scanString = (i) => {
+    out.push('"');
     let j = i + 1;
+    let lastCopy = j;
+
     while (j < n) {
       const c = s.charCodeAt(j);
       if (c === QUOTE) {
-        j++;
-        out.push(s.slice(i, j));
-        return j;
+        if (j > lastCopy) out.push(s.slice(lastCopy, j));
+        out.push('"');
+        return j + 1;
       }
+
       if (c === BACKSLASH) {
+        const backslashPos = j;
         j++;
-        if (j < n && s.charCodeAt(j) === 117) j += 5;
-        else j++;
+        if (j < n && s.charCodeAt(j) === 117 /* 'u' */) {
+          const codePoint = parseHex4(j + 1);
+          if (codePoint >= 0) {
+            if (backslashPos > lastCopy) out.push(s.slice(lastCopy, backslashPos));
+            out.push(String.fromCharCode(codePoint));
+            j += 5; // skip 'u' + 4 hex digits
+            lastCopy = j;
+            continue;
+          }
+          j = backslashPos + 1;
+        }
+        if (j < n) j++;
         continue;
       }
+
       j++;
     }
-    out.push(s.slice(i, n));
+
+    // Unterminated string fallback
+    if (n > lastCopy) out.push(s.slice(lastCopy, n));
     return n;
   };
 
+  // --- Main scan loop ---
   let i = 0;
   while (i < n) {
-    // 🔥 Faster inline skipWS (no per-call function)
     while (i < n && WHITESPACE[s.charCodeAt(i)]) i++;
     if (i >= n) break;
 
@@ -128,7 +170,7 @@ function fastJsonFormat(input, indent = '  ') {
       continue;
     }
 
-    // 🔥 inline scanAtom (cached charCode)
+    // Fast atom scan
     let j = i;
     while (j < n) {
       const cj = s.charCodeAt(j);
