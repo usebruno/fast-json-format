@@ -1,140 +1,291 @@
-const STRUCTURAL = new Uint8Array(128);
-const WHITESPACE = new Uint8Array(128);
+/**
+ * Character classification lookup tables for JSON formatting.
+ * STRUCTURAL: Marks structural JSON characters like { } [ ] : ,
+ * WHITESPACE: Marks whitespace characters (space, tab, newline, etc.)
+ */
+const STRUCTURAL_CHAR_CODES = new Uint8Array(128);
+const WHITESPACE_CHAR_CODES = new Uint8Array(128);
+
+// Character codes for key JSON tokens
+const CHAR_CODE = {
+  QUOTE: 34,
+  BACKSLASH: 92,
+  FORWARD_SLASH: 47,
+  OPEN_BRACE: 123,
+  CLOSE_BRACE: 125,
+  OPEN_BRACKET: 91,
+  CLOSE_BRACKET: 93,
+  COMMA: 44,
+  COLON: 58,
+};
+
 (() => {
-  [34, 44, 58, 91, 93, 123, 125].forEach((c) => (STRUCTURAL[c] = 1)); // " , : [ ] { }
-  [9, 10, 13, 32].forEach((c) => (WHITESPACE[c] = 1)); // \t \n \r space
+  // JSON structural characters: " , : [ ] { }
+  [34, 44, 58, 91, 93, 123, 125].forEach(
+    (charCode) => (STRUCTURAL_CHAR_CODES[charCode] = 1)
+  );
+  // Whitespace characters: \t \n \r space
+  [9, 10, 13, 32].forEach((charCode) => (WHITESPACE_CHAR_CODES[charCode] = 1));
 })();
 
-// High-performance Unicode decoding without regex
-function decodeUnicodeString(str) {
-  if (str.indexOf('\\u') === -1) return str;
-  let out = '';
-  const n = str.length;
-  for (let i = 0; i < n; i++) {
-    const ch = str.charCodeAt(i);
-    if (ch === 92 && str.charCodeAt(i + 1) === 117 && i + 5 < n) { // \u
-      const code = parseInt(str.substr(i + 2, 4), 16);
+/**
+ * Decodes escaped Unicode sequences (e.g. "\\u0041") to actual characters.
+ * Optimized to avoid regex and minimize string allocations.
+ *
+ * @param {string} input - String potentially containing \uXXXX sequences.
+ * @returns {string} - Decoded string with proper Unicode characters.
+ */
+function decodeUnicodeEscapes(input) {
+  if (input.indexOf("\\u") === -1 && input.indexOf("\\/") === -1) {
+    return input;
+  }
+
+  let output = "";
+  let i = 0;
+  const len = input.length;
+
+  while (i < len) {
+    const ch = input.charCodeAt(i);
+
+    // Handle \uXXXX
+    if (ch === 92 && i + 5 < len && input.charCodeAt(i + 1) === 117) {
+      const hex = input.substr(i + 2, 4);
+      const code = parseInt(hex, 16);
       if (!isNaN(code)) {
-        // Handle surrogate pairs
-        if (code >= 0xd800 && code <= 0xdbff && i + 11 < n &&
-            str.charCodeAt(i + 6) === 92 && str.charCodeAt(i + 7) === 117) {
-          const low = parseInt(str.substr(i + 8, 4), 16);
-          if (!isNaN(low) && low >= 0xdc00 && low <= 0xdfff) {
-            out += String.fromCodePoint(((code - 0xd800) << 10) + (low - 0xdc00) + 0x10000);
-            i += 11;
-            continue;
-          }
-        }
-        out += String.fromCharCode(code);
-        i += 5;
+        output += String.fromCharCode(code);
+        i += 6;
         continue;
       }
     }
-    out += str[i];
+
+    // Handle escaped forward slash
+    if (ch === 92 && i + 1 < len && input.charCodeAt(i + 1) === 47) {
+      output += "/";
+      i += 2;
+      continue;
+    }
+
+    // Copy normal character
+    output += input[i];
+    i++;
   }
-  return out;
+
+  return output;
 }
 
-// High-performance JSON formatter
-function fastJsonFormat(input, indent = '  ') {
-  if (input === undefined) return '';
-  if (typeof input !== 'string') {
-    try { return JSON.stringify(input, null, indent); } catch { return ''; }
+/**
+ * Safely converts a string or `String` object to its primitive string representation.
+ * If the input is a `String` object, it calls `toString()`; if it is already a primitive string,
+ * the function returns it unchanged. This ensures safe conversion without throwing errors.
+ *
+ * @param {any | String} str - The string or `String` object to convert.
+ * @returns {string} The primitive string representation of the input.
+ *
+ * @example
+ * toStringSafe("hello"); // "hello"
+ * toStringSafe(new String("world")); // "world"
+ */
+function toStringSafe(input) {
+  return input instanceof String ? input.toString() : input;
+}
+
+/**
+ * High-performance JSON pretty printer.
+ * Works directly on strings (no JSON.parse), efficiently scanning and reformatting.
+ *
+ * @param {string|object} input - The JSON string or JS object to format.
+ * @param {string} indentString - Indentation (e.g., "  " or "\t"). Defaults to 2 spaces.
+ * @returns {string} - Formatted JSON-like output.
+ */
+function fastJsonFormat(inputRaw, indentString = "  ") {
+  const input = toStringSafe(inputRaw);
+  if (input === undefined) return "";
+
+  // Handle non-string input by delegating to JSON.stringify
+  if (typeof input !== "string") {
+    try {
+      return JSON.stringify(input, null, indentString);
+    } catch {
+      return "";
+    }
   }
 
-  const s = input;
-  const n = s.length;
-  const pretty = typeof indent === 'string' && indent.length > 0;
+  const jsonText = input;
+  const jsonLength = jsonText.length;
+  const shouldPrettyPrint =
+    typeof indentString === "string" && indentString.length > 0;
 
-  // chunked output builder (avoids large Array.push overhead)
-  const CHUNK_SIZE = 1 << 16; // 64KB per chunk
-  const chunks = [];
-  let buffer = '';
-  const flush = () => { chunks.push(buffer); buffer = ''; };
-  const write = (x) => {
-    buffer += x;
-    if (buffer.length > CHUNK_SIZE) flush();
-  };
+  // Buffered writer setup to reduce string concatenation cost
+  const CHUNK_SIZE = Math.min(1 << 16, Math.max(1 << 12, input.length / 8)); // 64 KB
+  let writeBuffer = "";
 
-  // precomputed indents
-  const indents = [''];
-  const getIndent = (k) => {
-    if (!pretty) return '';
-    if (indents[k]) return indents[k];
-    let cur = indents[indents.length - 1];
-    for (let j = indents.length; j <= k; j++) {
-      cur += indent;
-      indents[j] = cur;
+  // On Over-provision by 50% to avoid reallocation.
+  // Pretty printing usually expands text by less then 2 times.
+  const encoder = new TextEncoder();
+  let resultArray = new Uint8Array((jsonLength * 3) << 1);
+  let offset = 0;
+
+  const flushBuffer = (exit) => {
+    if (!writeBuffer) return;
+    const encoded = encoder.encode(writeBuffer);
+    const needed = offset + encoded.length;
+
+    if (needed > resultArray.length) {
+      const newLength = Math.max(needed, resultArray.length << 1);
+      const newArray = new Uint8Array(newLength);
+      newArray.set(resultArray.subarray(0, offset));
+      resultArray = newArray;
     }
-    return indents[k];
+
+    resultArray.set(encoded, offset);
+    offset = needed;
+
+    if (!exit) writeBuffer = "";
   };
 
-  const QUOTE = 34, BACKSLASH = 92, OPEN_BRACE = 123, CLOSE_BRACE = 125,
-        OPEN_BRACKET = 91, CLOSE_BRACKET = 93, COMMA = 44, COLON = 58;
+  const writeToBuffer = (content) => {
+    writeBuffer += content;
+    if (writeBuffer.length > CHUNK_SIZE) flushBuffer();
+  };
 
-  let i = 0, level = 0;
+  // Cache indentation strings to avoid recomputation
+  const indentCache = [""];
+  const getIndentation = (level) => {
+    if (!shouldPrettyPrint) return "";
+    if (indentCache[level]) return indentCache[level];
+    let lastIndent = indentCache[indentCache.length - 1];
+    for (let depth = indentCache.length; depth <= level; depth++) {
+      lastIndent += indentString;
+      indentCache[depth] = lastIndent;
+    }
+    return indentCache[level];
+  };
 
-  while (i < n) {
-    while (i < n && WHITESPACE[s.charCodeAt(i)]) i++;
-    if (i >= n) break;
+  let index = 0;
+  let currentIndentLevel = 0;
 
-    const c = s.charCodeAt(i);
+  // === Main scanning loop ===
+  while (index < jsonLength) {
+    // Skip whitespace
+    while (
+      index < jsonLength &&
+      WHITESPACE_CHAR_CODES[jsonText.charCodeAt(index)]
+    ) {
+      index++;
+    }
+    if (index >= jsonLength) break;
 
-    if (c === QUOTE) {
-      const start = i++;
-      while (i < n) {
-        const cc = s.charCodeAt(i);
-        if (cc === QUOTE) { i++; break; }
-        if (cc === BACKSLASH) i += 2;
-        else i++;
+    const currentCharCode = jsonText.charCodeAt(index);
+
+    // === Handle String Literals ===
+    if (currentCharCode === CHAR_CODE.QUOTE) {
+      const stringStart = index++;
+      while (index < jsonLength) {
+        const nextChar = jsonText.charCodeAt(index);
+        if (nextChar === CHAR_CODE.QUOTE) {
+          index++;
+          break;
+        }
+        if (nextChar === CHAR_CODE.BACKSLASH) {
+          index += 2;
+        } else {
+          index++;
+        }
       }
-      const inner = s.slice(start + 1, i - 1);
-      const decoded = decodeUnicodeString(inner);
-      write('"'); write(decoded); write('"');
+
+      const innerContent = jsonText.slice(stringStart + 1, index - 1);
+      const decodedString = decodeUnicodeEscapes(innerContent);
+
+      writeToBuffer('"');
+      writeToBuffer(decodedString);
+      writeToBuffer('"');
       continue;
     }
 
-    if (c === OPEN_BRACE || c === OPEN_BRACKET) {
-      const openCh = s[i];
-      const closeCh = c === OPEN_BRACE ? '}' : ']';
-      let k = i + 1;
-      while (k < n && WHITESPACE[s.charCodeAt(k)]) k++;
-      if (k < n && s[k] === closeCh) { write(openCh + closeCh); i = k + 1; continue; }
-      write(openCh);
-      if (pretty) { write('\n'); write(getIndent(level + 1)); }
-      level++;
-      i++;
+    // === Handle Opening Braces / Brackets ===
+    if (
+      currentCharCode === CHAR_CODE.OPEN_BRACE ||
+      currentCharCode === CHAR_CODE.OPEN_BRACKET
+    ) {
+      const openChar = jsonText[index];
+      const closeChar = currentCharCode === CHAR_CODE.OPEN_BRACE ? "}" : "]";
+
+      // Check for empty object/array: {} or []
+      let lookaheadIndex = index + 1;
+      while (
+        lookaheadIndex < jsonLength &&
+        WHITESPACE_CHAR_CODES[jsonText.charCodeAt(lookaheadIndex)]
+      ) {
+        lookaheadIndex++;
+      }
+      if (
+        lookaheadIndex < jsonLength &&
+        jsonText[lookaheadIndex] === closeChar
+      ) {
+        writeToBuffer(openChar + closeChar);
+        index = lookaheadIndex + 1;
+        continue;
+      }
+
+      writeToBuffer(openChar);
+      if (shouldPrettyPrint) {
+        writeToBuffer("\n");
+        writeToBuffer(getIndentation(currentIndentLevel + 1));
+      }
+      currentIndentLevel++;
+      index++;
       continue;
     }
 
-    if (c === CLOSE_BRACE || c === CLOSE_BRACKET) {
-      level = Math.max(0, level - 1);
-      if (pretty) { write('\n'); write(getIndent(level)); }
-      write(s[i++]);
+    // === Handle Closing Braces / Brackets ===
+    if (
+      currentCharCode === CHAR_CODE.CLOSE_BRACE ||
+      currentCharCode === CHAR_CODE.CLOSE_BRACKET
+    ) {
+      currentIndentLevel = Math.max(0, currentIndentLevel - 1);
+      if (shouldPrettyPrint) {
+        writeToBuffer("\n");
+        writeToBuffer(getIndentation(currentIndentLevel));
+      }
+      writeToBuffer(jsonText[index++]);
       continue;
     }
 
-    if (c === COMMA) {
-      write(',');
-      if (pretty) { write('\n'); write(getIndent(level)); }
-      i++;
+    // === Handle Commas ===
+    if (currentCharCode === CHAR_CODE.COMMA) {
+      writeToBuffer(",");
+      if (shouldPrettyPrint) {
+        writeToBuffer("\n");
+        writeToBuffer(getIndentation(currentIndentLevel));
+      }
+      index++;
       continue;
     }
 
-    if (c === COLON) {
-      if (pretty) write(': ');
-      else write(':');
-      i++;
+    // === Handle Colons ===
+    if (currentCharCode === CHAR_CODE.COLON) {
+      if (shouldPrettyPrint) writeToBuffer(": ");
+      else writeToBuffer(":");
+      index++;
       continue;
     }
 
-    const start = i;
-    while (i < n && !STRUCTURAL[s.charCodeAt(i)] && !WHITESPACE[s.charCodeAt(i)]) i++;
-    write(s.slice(start, i));
+    // === Handle Primitive Values (numbers, booleans, null, etc.) ===
+    const tokenStart = index;
+    while (
+      index < jsonLength &&
+      !STRUCTURAL_CHAR_CODES[jsonText.charCodeAt(index)] &&
+      !WHITESPACE_CHAR_CODES[jsonText.charCodeAt(index)]
+    ) {
+      index++;
+    }
+    writeToBuffer(jsonText.slice(tokenStart, index));
   }
 
-  if (buffer.length) chunks.push(buffer);
-  return chunks.join('');
+  // Flush any remaining buffer
+  if (writeBuffer.length) flushBuffer(1);
+
+  return new TextDecoder().decode(resultArray.subarray(0, offset));
 }
 
 module.exports = fastJsonFormat;
