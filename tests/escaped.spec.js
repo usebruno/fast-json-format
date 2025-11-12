@@ -67,3 +67,54 @@ describe('escaped characters', () => {
     assertEqual(input, expected);
   });
 });
+
+describe('forward slash escape sequences', () => {
+  it('should decode \\/ escape sequences to forward slashes', () => {
+    const input = '{"url":"https:\\/\\/example.com\\/api\\/v1"}';
+    const expected = `{
+  "url": "https://example.com/api/v1"
+}`;
+    assertEqual(input, expected);
+  });
+
+  it('should handle unescaped forward slashes correctly', () => {
+    const input = '{"url":"https://example.com/api/v1"}';
+    const expected = `{
+  "url": "https://example.com/api/v1"
+}`;
+    assertEqual(input, expected);
+  });
+
+  it('should handle forward slashes mixed with other escape sequences', () => {
+    const input = '{"text":"line1\\npath\\/to\\/file\\ttab","unicode":"\\u4e16\\u754c\\/path"}';
+    const expected = `{
+  "text": "line1\\npath/to/file\\ttab",
+  "unicode": "世界/path"
+}`;
+    assertEqual(input, expected);
+  });
+
+  it('should handle a single escaped forward slash', () => {
+    const input = '{"slash":"\\/"}';
+    const expected = `{
+  "slash": "/"
+}`;
+    assertEqual(input, expected);
+  });
+
+  it('should handle multiple consecutive escaped forward slashes', () => {
+    const input = '{"path":"\\/\\/network\\/share"}';
+    const expected = `{
+  "path": "//network/share"
+}`;
+    assertEqual(input, expected);
+  });
+
+  it('should handle escaped forward slash at end of string', () => {
+    const input = '{"url":"https://example.com\\/"}';
+    const expected = `{
+  "url": "https://example.com/"
+}`;
+    assertEqual(input, expected);
+  });
+});
