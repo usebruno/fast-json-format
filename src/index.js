@@ -1,6 +1,7 @@
 /**
  * Pretty-prints a JSON-like string without parsing.
  * Fast path: chunked copying, fast string scan, lookahead for empty {} / [].
+ * Decodes \uXXXX unicode sequences and \/ forward slash escapes for readability.
  *
  * @param {string} input
  * @param {string} indent
@@ -45,6 +46,7 @@ function fastJsonFormat(input, indent = '  ') {
   // Character codes
   const QUOTE = 34;        // "
   const BACKSLASH = 92;    // \
+  const FORWARD_SLASH = 47;// /
   const OPEN_BRACE = 123;  // {
   const CLOSE_BRACE = 125; // }
   const OPEN_BRACKET = 91; // [
@@ -97,7 +99,7 @@ function fastJsonFormat(input, indent = '  ') {
   };
 
   // Scan a JSON string starting at index of opening quote `i` (s[i] === '"').
-  // Returns index just after the closing quote and decodes \uXXXX sequences.
+  // Returns index just after the closing quote and decodes \uXXXX and \/ sequences.
   const scanString = (i) => {
     out.push('"'); // opening quote
     let j = i + 1;
@@ -134,6 +136,16 @@ function fastJsonFormat(input, indent = '  ') {
           }
           // If parsing failed, reset and let it be copied as-is
           j = backslashPos + 1;
+        } else if (j < n && s.charCodeAt(j) === FORWARD_SLASH) {
+          // Found \/ - decode to / for readability
+          // Copy everything up to the backslash
+          if (backslashPos > lastCopy) {
+            out.push(s.slice(lastCopy, backslashPos));
+          }
+          out.push('/');
+          j++; // skip the forward slash
+          lastCopy = j;
+          continue;
         }
         // For other escapes (or invalid \u), just skip the escaped char
         if (j < n) j++;
