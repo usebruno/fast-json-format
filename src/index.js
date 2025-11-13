@@ -1,99 +1,10 @@
-/**
- * Lookup table for structural characters in JSON such as {}[],:"
- * @type {Uint8Array}
- */
-const STRUCTURAL_CHARS = new Uint8Array(128);
-
-/**
- * Lookup table for whitespace characters (tab, newline, carriage return, space)
- * @type {Uint8Array}
- */
-const WHITESPACE_CHARS = new Uint8Array(128);
-
-/**
- * Common JSON structural character codes.
- * @readonly
- * @enum {number}
- */
-const CHAR_CODE = {
-  QUOTE: 34, // "
-  BACKSLASH: 92, // \
-  SLASH: 47, // /
-  OPEN_BRACE: 123, // {
-  CLOSE_BRACE: 125, // }
-  OPEN_BRACKET: 91, // [
-  CLOSE_BRACKET: 93, // ]
-  COMMA: 44, // ,
-  COLON: 58, // :
-};
-
-// Initialize lookup tables
-(() => {
-  /** @type {number[]} JSON structural characters: " , : [ ] { } */
-  const structuralCodes = [34, 44, 58, 91, 93, 123, 125];
-  structuralCodes.forEach((code) => (STRUCTURAL_CHARS[code] = 1));
-
-  /** @type {number[]} Whitespace characters: \t \n \r space */
-  const whitespaceCodes = [9, 10, 13, 32];
-  whitespaceCodes.forEach((code) => (WHITESPACE_CHARS[code] = 1));
-})();
-
-/**
- * Decodes escaped Unicode sequences like "\u0041" → "A"
- * Also converts escaped forward slashes "\/" → "/"
- *
- * @param {string} str - Input string possibly containing escape sequences
- * @returns {string} Decoded string
- */
-function decodeEscapedUnicode(input) {
-  if (input.indexOf("\\u") === -1 && input.indexOf("\\/") === -1) {
-    return input;
-  }
-
-  /** @type {string[]} */
-  let output = [];
-  let i = 0;
-  const len = input.length;
-
-  while (i < len) {
-    const ch = input.charCodeAt(i);
-
-    // Handle \uXXXX
-    if (ch === 92 && i + 5 < len && input.charCodeAt(i + 1) === 117) {
-      const hex = input.substr(i + 2, 4);
-      const code = parseInt(hex, 16);
-      if (!isNaN(code)) {
-        output.push(String.fromCharCode(code));
-        i += 6;
-        continue;
-      }
-    }
-
-    // Handle "\/"
-    if (ch === 92 && i + 1 < len && input.charCodeAt(i + 1) === 47) {
-      output.push("/");
-      i += 2;
-      continue;
-    }
-
-    // Normal character
-    output.push(input[i]);
-    i++;
-  }
-
-  return output.join("");
-}
-
-/**
- * Safely convert a String object to a primitive string.
- *
- * @template T
- * @param {T} value - Any input value
- * @returns {string | T} String value if applicable, otherwise unchanged
- */
-function ensureString(input) {
-  return input instanceof String ? input.toString() : input;
-}
+const {
+  CHAR_CODE,
+  STRUCTURAL_CHARS,
+  WHITESPACE_CHARS,
+} = require("./constants/index");
+const { decodeEscapedUnicode } = require("./utils/decode-escaped-unicode");
+const { ensureString } = require("./utils/ensure-string");
 
 /**
  * Fast JSON pretty printer with streaming-style buffering.
