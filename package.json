@@ -26,6 +26,7 @@
     "chalk": "^4.1.2",
     "jest": "^30.2.0",
     "json-bigint": "^1.0.0",
+    "jsonc-parser": "^3.3.1",
     "lossless-json": "^4.3.0"
   },
   "license": "MIT"
