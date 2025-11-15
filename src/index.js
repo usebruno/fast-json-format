@@ -1,264 +1,212 @@
+const {
+  CHAR_CODE,
+  STRUCTURAL_CHARS,
+  WHITESPACE_CHARS,
+} = require("./constants/index");
+const { decodeEscapedUnicode } = require("./utils/decode-escaped-unicode");
+const { ensureString } = require("./utils/ensure-string");
+
 /**
- * Pretty-prints a JSON-like string without parsing.
- * Fast path: chunked copying, fast string scan, lookahead for empty {} / [].
- * Decodes \uXXXX unicode sequences and \/ forward slash escapes for readability.
+ * Fast JSON pretty printer with streaming-style buffering.
  *
- * @param {string} input
- * @param {string} indent
- * @returns {string}
+ * @param {string | object} inputRaw - Input JSON string or object
+ * @param {string} [indent="  "] - Indentation characters, e.g. two spaces or "\t"
+ * @returns {string} Pretty-printed JSON
  */
-function fastJsonFormat(input, indent = '  ') {
-  if (input === undefined) return '';
+function fastJsonFormat(inputRaw, indentString = "  ") {
+  /** @type {string | object} */
+  const input = ensureString(inputRaw);
+  if (input === undefined) return "";
 
-  // For non-string input, fall back to JSON.stringify behavior.
-  if (typeof input !== 'string') {
+  // Handle non-string input by delegating to JSON.stringify
+  if (typeof input !== "string") {
     try {
-      return JSON.stringify(input, null, indent);
+      return JSON.stringify(input, null, indentString);
     } catch {
-      return '';
+      return "";
     }
   }
 
-  const s = String(input);
-  const n = s.length;
+  /** @type {string} */
+  const json = input;
+  const jsonLength = json.length;
+  const shouldPrettyPrint =
+    typeof indentString === "string" && indentString.length > 0;
 
-  // Fast minify-like path when indent is empty.
-  const useIndent = typeof indent === 'string' ? indent : '  ';
-  const pretty = useIndent.length > 0;
+  /** @type {number} */
+  const CHUNK_SIZE = Math.min(1 << 16, Math.max(1 << 12, input.length / 8)); // 64 KB
 
-  // Output as array of chunks (strings). Much faster than char-by-char.
-  const out = [];
-  let level = 0;
+  /** @type {string} */
+  let textBuffer = "";
 
-  // Cached indents.
-  const indents = [''];
-  const getIndent = (k) => {
-    if (!pretty) return ''; // minify fast-path
-    if (indents[k] !== undefined) return indents[k];
-    let cur = indents[indents.length - 1];
-    for (let j = indents.length; j <= k; j++) {
-      cur += useIndent;
-      indents[j] = cur;
+  /** @type {TextEncoder} */
+  const encoder = new TextEncoder();
+
+  /** @type {Uint8Array} */
+  let outputArray = new Uint8Array((jsonLength * 3) << 1);
+
+  /** @type {number} */
+  let offset = 0;
+
+  /**
+   * Flush buffered text into outputArray.
+   * @param {boolean} [isFinal=false] - Whether this is the final flush
+   * @returns {void}
+   */
+  const flushBuffer = (exit) => {
+    if (!textBuffer) return;
+    const encoded = encoder.encode(textBuffer);
+    const needed = offset + encoded.length;
+
+    if (needed > outputArray.length) {
+      const newLength = Math.max(needed, outputArray.length << 1);
+      const newArray = new Uint8Array(newLength);
+      newArray.set(outputArray.subarray(0, offset));
+      outputArray = newArray;
     }
-    return indents[k];
+
+    outputArray.set(encoded, offset);
+    offset = needed;
+
+    if (!exit) textBuffer = "";
   };
 
-  // Character codes
-  const QUOTE = 34;        // "
-  const BACKSLASH = 92;    // \
-  const FORWARD_SLASH = 47;// /
-  const OPEN_BRACE = 123;  // {
-  const CLOSE_BRACE = 125; // }
-  const OPEN_BRACKET = 91; // [
-  const CLOSE_BRACKET = 93;// ]
-  const COMMA = 44;        // ,
-  const COLON = 58;        // :
-  const SPACE = 32;        // ' '
-  const TAB = 9;           // '\t'
-  const NEWLINE = 10;      // '\n'
-  const CR = 13;           // '\r'
-
-  const isSpaceCode = (c) =>
-    c === SPACE || c === TAB || c === NEWLINE || c === CR;
-
-  // Skip whitespace starting at idx; return first non-space index (<= n)
-  const skipWS = (idx) => {
-    while (idx < n && isSpaceCode(s.charCodeAt(idx))) idx++;
-    return idx;
+  /**
+   * Append text to the buffer, flushing automatically if necessary.
+   * @param {string} text
+   * @returns {void}
+   */
+  const append = (content) => {
+    textBuffer += content;
+    if (textBuffer.length > CHUNK_SIZE) flushBuffer();
   };
 
-  // Helper: check if character code is a valid hex digit (0-9, A-F, a-f)
-  const isHexDigit = (code) => {
-    return (code >= 48 && code <= 57) ||   // 0-9
-           (code >= 65 && code <= 70) ||   // A-F
-           (code >= 97 && code <= 102);    // a-f
-  };
+  /**
+   * Generate an indentation string for a given depth level.
+   * @param {number} level
+   * @returns {string}
+   */
+  const makeIndent = (level) => indentString.repeat(level);
 
-  // Helper: parse 4 hex digits starting at position j
-  // Returns -1 if invalid, otherwise the code point
-  const parseHex4 = (j) => {
-    if (j + 4 > n) return -1;
-    const c1 = s.charCodeAt(j);
-    const c2 = s.charCodeAt(j + 1);
-    const c3 = s.charCodeAt(j + 2);
-    const c4 = s.charCodeAt(j + 3);
-    if (!isHexDigit(c1) || !isHexDigit(c2) || !isHexDigit(c3) || !isHexDigit(c4)) {
-      return -1;
-    }
-    // Fast hex parsing without parseInt
-    let val = 0;
-    // First digit
-    val = c1 <= 57 ? c1 - 48 : (c1 <= 70 ? c1 - 55 : c1 - 87);
-    // Second digit
-    val = (val << 4) | (c2 <= 57 ? c2 - 48 : (c2 <= 70 ? c2 - 55 : c2 - 87));
-    // Third digit
-    val = (val << 4) | (c3 <= 57 ? c3 - 48 : (c3 <= 70 ? c3 - 55 : c3 - 87));
-    // Fourth digit
-    val = (val << 4) | (c4 <= 57 ? c4 - 48 : (c4 <= 70 ? c4 - 55 : c4 - 87));
-    return val;
-  };
+  /** @type {number} */
+  let index = 0;
 
-  // Scan a JSON string starting at index of opening quote `i` (s[i] === '"').
-  // Returns index just after the closing quote and decodes \uXXXX and \/ sequences.
-  const scanString = (i) => {
-    out.push('"'); // opening quote
-    let j = i + 1;
-    let lastCopy = j; // track where we last copied from
-    
-    while (j < n) {
-      const c = s.charCodeAt(j);
-      if (c === QUOTE) { // end of string
-        // Copy any remaining content before the closing quote
-        if (j > lastCopy) {
-          out.push(s.slice(lastCopy, j));
+  /** @type {number} */
+  let depth = 0;
+
+  // === Main scanning loop ===
+  while (index < jsonLength) {
+    // Skip whitespace
+    for (
+      ;
+      index < jsonLength && WHITESPACE_CHARS[json.charCodeAt(index)];
+      index++
+    );
+    if (index >= jsonLength) break;
+
+    const currentCharCode = json.charCodeAt(index);
+
+    // String literals
+    if (currentCharCode === CHAR_CODE.QUOTE) {
+      const stringStart = index++;
+      while (index < jsonLength) {
+        const nextChar = json.charCodeAt(index);
+        if (nextChar === CHAR_CODE.QUOTE) {
+          index++;
+          break;
         }
-        out.push('"'); // closing quote
-        return j + 1;
-      }
-      if (c === BACKSLASH) {
-        const backslashPos = j;
-        j++;
-        if (j < n && s.charCodeAt(j) === 117 /* 'u' */) {
-          // Found \uXXXX - try to decode it to actual unicode character
-          const codePoint = parseHex4(j + 1);
-          
-          if (codePoint >= 0) {
-            // Valid hex sequence - decode it
-            // Copy everything up to the backslash
-            if (backslashPos > lastCopy) {
-              out.push(s.slice(lastCopy, backslashPos));
-            }
-            // Convert to actual unicode character
-            out.push(String.fromCharCode(codePoint));
-            j += 5; // skip 'u' + 4 hex digits
-            lastCopy = j;
-            continue;
-          }
-          // If parsing failed, reset and let it be copied as-is
-          j = backslashPos + 1;
-        } else if (j < n && s.charCodeAt(j) === FORWARD_SLASH) {
-          // Found \/ - decode to / for readability
-          // Copy everything up to the backslash
-          if (backslashPos > lastCopy) {
-            out.push(s.slice(lastCopy, backslashPos));
-          }
-          out.push('/');
-          j++; // skip the forward slash
-          lastCopy = j;
-          continue;
+        if (nextChar === CHAR_CODE.BACKSLASH) {
+          index += 2;
+        } else {
+          index++;
         }
-        // For other escapes (or invalid \u), just skip the escaped char
-        if (j < n) j++;
-        continue;
       }
-      j++;
-    }
-    // Unterminated: copy remaining content (forgiving)
-    if (n > lastCopy) {
-      out.push(s.slice(lastCopy, n));
-    }
-    return n;
-  };
 
-  // Copy a run of non-structural, non-space characters starting at i.
-  // Stops at space or one of the structural chars ,:{}[]"
-  const scanAtom = (i) => {
-    let j = i;
-    scan: while (j < n) {
-      const c = s.charCodeAt(j);
-      switch (c) {
-        case SPACE:
-        case TAB:
-        case NEWLINE:
-        case CR:
-        case QUOTE:
-        case OPEN_BRACE:
-        case CLOSE_BRACE:
-        case OPEN_BRACKET:
-        case CLOSE_BRACKET:
-        case COMMA:
-        case COLON:
-          break scan;
-      }
-      j++;
-    }
-    if (j > i) out.push(s.slice(i, j));
-    return j;
-  };
+      const innerContent = json.slice(stringStart + 1, index - 1);
+      const decodedString = decodeEscapedUnicode(innerContent);
 
-  let i = 0;
-
-  while (i < n) {
-    i = skipWS(i);
-    if (i >= n) break;
-
-    const c = s.charCodeAt(i);
-
-    // Strings
-    if (c === QUOTE) {
-      i = scanString(i);
+      append(`"${decodedString}"`);
       continue;
     }
 
-    // Structural tokens
-    if (c === OPEN_BRACE || c === OPEN_BRACKET) {
-      const openCh = s[i];
-      const isBrace = c === OPEN_BRACE;
-      const closeCh = isBrace ? '}' : ']';
+    // Opening braces/brackets
+    if (
+      currentCharCode === CHAR_CODE.OPEN_BRACE ||
+      currentCharCode === CHAR_CODE.OPEN_BRACKET
+    ) {
+      const openChar = json[index];
+      const closeChar = currentCharCode === CHAR_CODE.OPEN_BRACE ? "}" : "]";
 
-      // Lookahead for empty {} or []: skip spaces to next significant char
-      let k = skipWS(i + 1);
-      if (k < n && s[k] === closeCh) {
-        // Emit {} / [] (no newline/indent)
-        out.push(openCh, closeCh);
-        i = k + 1;
+      let lookahead = index + 1;
+      while (
+        lookahead < jsonLength &&
+        WHITESPACE_CHARS[json.charCodeAt(lookahead)]
+      )
+        lookahead++;
+
+      // Empty object/array
+      if (lookahead < jsonLength && json[lookahead] === closeChar) {
+        append(openChar + closeChar);
+        index = lookahead + 1;
         continue;
       }
 
-      // Non-empty: normal pretty formatting
-      out.push(openCh);
-      if (pretty) {
-        out.push('\n', getIndent(level + 1));
+      append(openChar);
+      if (shouldPrettyPrint) {
+        append(`\n${makeIndent(depth + 1)}`);
       }
-      level++;
-      i++;
+      depth++;
+      index++;
       continue;
     }
 
-    if (c === CLOSE_BRACE || c === CLOSE_BRACKET) {
-      level = level > 0 ? level - 1 : 0;
-      if (pretty) {
-        out.push('\n', getIndent(level));
+    // Closing braces/brackets
+    if (
+      currentCharCode === CHAR_CODE.CLOSE_BRACE ||
+      currentCharCode === CHAR_CODE.CLOSE_BRACKET
+    ) {
+      depth = Math.max(0, depth - 1);
+      if (shouldPrettyPrint) {
+        append(`\n${makeIndent(depth)}`);
       }
-      out.push(s[i]);
-      i++;
+      append(json[index++]);
       continue;
     }
 
-    if (c === COMMA) {
-      out.push(',');
-      if (pretty) {
-        out.push('\n', getIndent(level));
+    // Comma
+    if (currentCharCode === CHAR_CODE.COMMA) {
+      append(",");
+      if (shouldPrettyPrint) {
+        append(`\n${makeIndent(depth)}`);
       }
-      i++;
+      index++;
       continue;
     }
 
-    if (c === COLON) {
-      if (pretty) {
-        out.push(':', ' ');
-      } else {
-        out.push(':');
-      }
-      i++;
+    // Colon
+    if (currentCharCode === CHAR_CODE.COLON) {
+      if (shouldPrettyPrint) append(": ");
+      else append(":");
+      index++;
       continue;
     }
 
-    // Outside strings & not structural: copy a whole run (numbers, literals, bigint suffix, identifiers)
-    i = scanAtom(i);
+    // Regular values (numbers, literals, etc.)
+    const tokenStart = index;
+    while (
+      index < jsonLength &&
+      !STRUCTURAL_CHARS[json.charCodeAt(index)] &&
+      !WHITESPACE_CHARS[json.charCodeAt(index)]
+    ) {
+      index++;
+    }
+    append(json.slice(tokenStart, index));
   }
 
-  return out.join('');
+  // Flush any remaining buffer
+  if (textBuffer.length) flushBuffer(1);
+
+  return new TextDecoder().decode(outputArray.subarray(0, offset));
 }
 
 module.exports = fastJsonFormat;

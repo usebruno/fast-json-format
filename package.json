@@ -18,7 +18,7 @@
   "scripts": {
     "prepack": "npm run test",
     "benchmark": "node benchmark.js",
-    "test": "jest tests/*.spec.js"
+    "test": "jest"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.9.0",
