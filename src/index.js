@@ -1,212 +1,267 @@
-const {
-  CHAR_CODE,
-  STRUCTURAL_CHARS,
-  WHITESPACE_CHARS,
-} = require("./constants/index");
-const { decodeEscapedUnicode } = require("./utils/decode-escaped-unicode");
-const { ensureString } = require("./utils/ensure-string");
+/**
+ * JSON syntax characters to their ASCII codes mapping
+ */
+const ASCII_CHARS = {
+  QUOTE: 34,
+  BACKSLASH: 92,
+  SLASH: 47,
+  OPEN_BRACE: 123,
+  CLOSE_BRACE: 125,
+  OPEN_BRACKET: 91,
+  CLOSE_BRACKET: 93,
+  COMMA: 44,
+  COLON: 58,
+  SPACE: 32,
+  TAB: 9,
+  LF: 10,
+  CR: 13,
+  u: 117,
+};
 
 /**
- * Fast JSON pretty printer with streaming-style buffering.
+ * Pretty print JSON
  *
- * @param {string | object} inputRaw - Input JSON string or object
- * @param {string} [indent="  "] - Indentation characters, e.g. two spaces or "\t"
- * @returns {string} Pretty-printed JSON
+ * @param {string | object} inputRaw JSON string or object to format
+ * @param {string} [indentStr="  "] Indentation string (default: two spaces)
+ * @returns {string} Formatted JSON string
  */
-function fastJsonFormat(inputRaw, indentString = "  ") {
-  /** @type {string | object} */
-  const input = ensureString(inputRaw);
-  if (input === undefined) return "";
+function fastJsonFormat(inputRaw, indentStr = "  ") {
+  if (inputRaw === undefined) return "";
 
-  // Handle non-string input by delegating to JSON.stringify
+  let input = inputRaw;
+  if (
+    typeof inputRaw === "object" &&
+    inputRaw !== null &&
+    inputRaw.constructor === String
+  ) {
+    input = inputRaw.valueOf();
+  }
+
   if (typeof input !== "string") {
     try {
-      return JSON.stringify(input, null, indentString);
+      return JSON.stringify(input, null, indentStr);
     } catch {
       return "";
     }
   }
 
-  /** @type {string} */
   const json = input;
   const jsonLength = json.length;
-  const shouldPrettyPrint =
-    typeof indentString === "string" && indentString.length > 0;
 
-  /** @type {number} */
-  const CHUNK_SIZE = Math.min(1 << 16, Math.max(1 << 12, input.length / 8)); // 64 KB
+  const indent =
+    typeof indentStr === "string" && indentStr.length > 0 ? indentStr : "  ";
+  const shouldIndent = typeof indentStr === "string" && indentStr.length > 0;
 
-  /** @type {string} */
-  let textBuffer = "";
+  const indentCache = new Array(101);
+  indentCache[0] = "";
+  for (let d = 1; d <= 100; d++) {
+    indentCache[d] = indentCache[d - 1] + indent;
+  }
 
-  /** @type {TextEncoder} */
-  const encoder = new TextEncoder();
-
-  /** @type {Uint8Array} */
-  let outputArray = new Uint8Array((jsonLength * 3) << 1);
-
-  /** @type {number} */
-  let offset = 0;
-
-  /**
-   * Flush buffered text into outputArray.
-   * @param {boolean} [isFinal=false] - Whether this is the final flush
-   * @returns {void}
-   */
-  const flushBuffer = (exit) => {
-    if (!textBuffer) return;
-    const encoded = encoder.encode(textBuffer);
-    const needed = offset + encoded.length;
-
-    if (needed > outputArray.length) {
-      const newLength = Math.max(needed, outputArray.length << 1);
-      const newArray = new Uint8Array(newLength);
-      newArray.set(outputArray.subarray(0, offset));
-      outputArray = newArray;
-    }
-
-    outputArray.set(encoded, offset);
-    offset = needed;
-
-    if (!exit) textBuffer = "";
-  };
-
-  /**
-   * Append text to the buffer, flushing automatically if necessary.
-   * @param {string} text
-   * @returns {void}
-   */
-  const append = (content) => {
-    textBuffer += content;
-    if (textBuffer.length > CHUNK_SIZE) flushBuffer();
-  };
-
-  /**
-   * Generate an indentation string for a given depth level.
-   * @param {number} level
-   * @returns {string}
-   */
-  const makeIndent = (level) => indentString.repeat(level);
-
-  /** @type {number} */
+  let output = "";
   let index = 0;
-
-  /** @type {number} */
   let depth = 0;
 
-  // === Main scanning loop ===
   while (index < jsonLength) {
-    // Skip whitespace
-    for (
-      ;
-      index < jsonLength && WHITESPACE_CHARS[json.charCodeAt(index)];
-      index++
-    );
+    while (index < jsonLength) {
+      const charCode = json.charCodeAt(index);
+
+      if (
+        charCode !== ASCII_CHARS.SPACE &&
+        charCode !== ASCII_CHARS.TAB &&
+        charCode !== ASCII_CHARS.LF &&
+        charCode !== ASCII_CHARS.CR
+      )
+        break;
+
+      index++;
+    }
+
     if (index >= jsonLength) break;
 
-    const currentCharCode = json.charCodeAt(index);
+    const ch = json.charCodeAt(index);
 
-    // String literals
-    if (currentCharCode === CHAR_CODE.QUOTE) {
-      const stringStart = index++;
+    if (ch === ASCII_CHARS.QUOTE) {
+      const strStart = index++;
+
       while (index < jsonLength) {
-        const nextChar = json.charCodeAt(index);
-        if (nextChar === CHAR_CODE.QUOTE) {
+        const c = json.charCodeAt(index);
+
+        if (c === ASCII_CHARS.QUOTE) {
           index++;
           break;
         }
-        if (nextChar === CHAR_CODE.BACKSLASH) {
+
+        if (c === ASCII_CHARS.BACKSLASH) {
           index += 2;
         } else {
           index++;
         }
       }
 
-      const innerContent = json.slice(stringStart + 1, index - 1);
-      const decodedString = decodeEscapedUnicode(innerContent);
+      const rawContent = json.substring(strStart + 1, index - 1);
 
-      append(`"${decodedString}"`);
-      continue;
-    }
+      if (
+        rawContent.indexOf("\\u") === -1 &&
+        rawContent.indexOf("\\/") === -1
+      ) {
+        output += '"' + rawContent + '"';
 
-    // Opening braces/brackets
-    if (
-      currentCharCode === CHAR_CODE.OPEN_BRACE ||
-      currentCharCode === CHAR_CODE.OPEN_BRACKET
-    ) {
-      const openChar = json[index];
-      const closeChar = currentCharCode === CHAR_CODE.OPEN_BRACE ? "}" : "]";
-
-      let lookahead = index + 1;
-      while (
-        lookahead < jsonLength &&
-        WHITESPACE_CHARS[json.charCodeAt(lookahead)]
-      )
-        lookahead++;
-
-      // Empty object/array
-      if (lookahead < jsonLength && json[lookahead] === closeChar) {
-        append(openChar + closeChar);
-        index = lookahead + 1;
         continue;
       }
 
-      append(openChar);
-      if (shouldPrettyPrint) {
-        append(`\n${makeIndent(depth + 1)}`);
+      let decoded = "";
+      let i = 0;
+      const len = rawContent.length;
+
+      while (i < len) {
+        const cc = rawContent.charCodeAt(i);
+
+        if (
+          cc === ASCII_CHARS.BACKSLASH &&
+          i + 5 < len &&
+          rawContent.charCodeAt(i + 1) === ASCII_CHARS.u
+        ) {
+          const hex = rawContent.substring(i + 2, i + 6);
+          const code = parseInt(hex, 16);
+
+          if (!isNaN(code)) {
+            decoded += String.fromCharCode(code);
+            i += 6;
+
+            continue;
+          }
+        }
+
+        if (
+          cc === ASCII_CHARS.BACKSLASH &&
+          i + 1 < len &&
+          rawContent.charCodeAt(i + 1) === ASCII_CHARS.SLASH
+        ) {
+          decoded += "/";
+          i += 2;
+
+          continue;
+        }
+
+        decoded += rawContent[i];
+        i++;
       }
-      depth++;
-      index++;
+
+      output += '"' + decoded + '"';
+
       continue;
     }
 
-    // Closing braces/brackets
-    if (
-      currentCharCode === CHAR_CODE.CLOSE_BRACE ||
-      currentCharCode === CHAR_CODE.CLOSE_BRACKET
-    ) {
+    if (ch === ASCII_CHARS.OPEN_BRACE || ch === ASCII_CHARS.OPEN_BRACKET) {
+      const openChar = json[index];
+      const closeCode =
+        ch === ASCII_CHARS.OPEN_BRACE
+          ? ASCII_CHARS.CLOSE_BRACE
+          : ASCII_CHARS.CLOSE_BRACKET;
+
+      let j = index + 1;
+      while (j < jsonLength) {
+        const c = json.charCodeAt(j);
+        if (
+          c !== ASCII_CHARS.SPACE &&
+          c !== ASCII_CHARS.TAB &&
+          c !== ASCII_CHARS.LF &&
+          c !== ASCII_CHARS.CR
+        ) {
+          break;
+        }
+
+        j++;
+      }
+
+      if (j < jsonLength && json.charCodeAt(j) === closeCode) {
+        output += openChar + json[j];
+        index = j + 1;
+
+        continue;
+      }
+
+      output += openChar;
+
+      if (shouldIndent) {
+        depth++;
+
+        const indentStr =
+          depth <= 100 ? indentCache[depth] : indent.repeat(depth);
+
+        output += "\n" + indentStr;
+      }
+
+      index++;
+
+      continue;
+    }
+
+    if (ch === ASCII_CHARS.CLOSE_BRACE || ch === ASCII_CHARS.CLOSE_BRACKET) {
       depth = Math.max(0, depth - 1);
-      if (shouldPrettyPrint) {
-        append(`\n${makeIndent(depth)}`);
+
+      if (shouldIndent) {
+        const indentStr =
+          depth <= 100 ? indentCache[depth] : indent.repeat(depth);
+
+        output += "\n" + indentStr;
       }
-      append(json[index++]);
+
+      output += json[index];
+      index++;
+
       continue;
     }
 
-    // Comma
-    if (currentCharCode === CHAR_CODE.COMMA) {
-      append(",");
-      if (shouldPrettyPrint) {
-        append(`\n${makeIndent(depth)}`);
+    if (ch === ASCII_CHARS.COMMA) {
+      output += ",";
+
+      if (shouldIndent) {
+        const indentStr =
+          depth <= 100 ? indentCache[depth] : indent.repeat(depth);
+
+        output += "\n" + indentStr;
       }
+
       index++;
+
       continue;
     }
 
-    // Colon
-    if (currentCharCode === CHAR_CODE.COLON) {
-      if (shouldPrettyPrint) append(": ");
-      else append(":");
+    if (ch === ASCII_CHARS.COLON) {
+      output += shouldIndent ? ": " : ":";
       index++;
+
       continue;
     }
 
-    // Regular values (numbers, literals, etc.)
     const tokenStart = index;
-    while (
-      index < jsonLength &&
-      !STRUCTURAL_CHARS[json.charCodeAt(index)] &&
-      !WHITESPACE_CHARS[json.charCodeAt(index)]
-    ) {
+    while (index < jsonLength) {
+      const c = json.charCodeAt(index);
+
+      if (
+        c === ASCII_CHARS.SPACE ||
+        c === ASCII_CHARS.TAB ||
+        c === ASCII_CHARS.LF ||
+        c === ASCII_CHARS.CR ||
+        c === ASCII_CHARS.COMMA ||
+        c === ASCII_CHARS.COLON ||
+        c === ASCII_CHARS.OPEN_BRACE ||
+        c === ASCII_CHARS.CLOSE_BRACE ||
+        c === ASCII_CHARS.OPEN_BRACKET ||
+        c === ASCII_CHARS.CLOSE_BRACKET
+      ) {
+        break;
+      }
+
       index++;
     }
-    append(json.slice(tokenStart, index));
+
+    output += json.substring(tokenStart, index);
   }
 
-  // Flush any remaining buffer
-  if (textBuffer.length) flushBuffer(1);
-
-  return new TextDecoder().decode(outputArray.subarray(0, offset));
+  return output;
 }
 
 module.exports = fastJsonFormat;

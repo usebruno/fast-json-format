@@ -1,7 +1,7 @@
-const { assertEqual } = require('./utils');
+const { assertEqual } = require("./utils");
 
-describe('whitespace handling', () => {
-  it('should skip existing whitespace outside strings', () => {
+describe("whitespace handling", () => {
+  it("should skip existing whitespace outside strings", () => {
     const input = '  {  "name"  :  "John"  ,  "age"  :  30  }  ';
     const expected = `{
   "name": "John",
@@ -10,7 +10,7 @@ describe('whitespace handling', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle tabs and newlines in input', () => {
+  it("should handle tabs and newlines in input", () => {
     const input = '{\n\t"name":\t"John",\n\t"age":\t30\n}';
     const expected = `{
   "name": "John",
@@ -19,7 +19,7 @@ describe('whitespace handling', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle mixed whitespace characters', () => {
+  it("should handle mixed whitespace characters", () => {
     const input = '{\r\n  "key"  :  \t"value"\r\n}';
     const expected = `{
   "key": "value"

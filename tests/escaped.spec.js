@@ -1,7 +1,7 @@
-const { assertEqual } = require('./utils');
+const { assertEqual } = require("./utils");
 
-describe('string handling', () => {
-  it('should handle escaped quotes correctly', () => {
+describe("string handling", () => {
+  it("should handle escaped quotes correctly", () => {
     const input = '{"quote":"She said \\"Hello\\""}';
     const expected = `{
   "quote": "She said \\"Hello\\""
@@ -9,7 +9,7 @@ describe('string handling', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle multiple escaped quotes', () => {
+  it("should handle multiple escaped quotes", () => {
     const input = '{"text":"\\"start\\" middle \\"end\\""}';
     const expected = `{
   "text": "\\"start\\" middle \\"end\\""
@@ -17,7 +17,7 @@ describe('string handling', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle backslashes correctly', () => {
+  it("should handle backslashes correctly", () => {
     const input = '{"path":"C:\\\\Users\\\\file.txt"}';
     const expected = `{
   "path": "C:\\\\Users\\\\file.txt"
@@ -25,7 +25,7 @@ describe('string handling', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle strings with special characters', () => {
+  it("should handle strings with special characters", () => {
     const input = '{"special":"{}[],:"}';
     const expected = `{
   "special": "{}[],:"
@@ -33,7 +33,7 @@ describe('string handling', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle strings with newlines and special chars', () => {
+  it("should handle strings with newlines and special chars", () => {
     const input = '{"multiline":"line1\\nline2\\nline3"}';
     const expected = `{
   "multiline": "line1\\nline2\\nline3"
@@ -42,8 +42,8 @@ describe('string handling', () => {
   });
 });
 
-describe('escaped characters', () => {
-  it('should handle double backslash before quote', () => {
+describe("escaped characters", () => {
+  it("should handle double backslash before quote", () => {
     const input = '{"path":"C:\\\\Program Files\\\\"}';
     const expected = `{
   "path": "C:\\\\Program Files\\\\"
@@ -51,7 +51,7 @@ describe('escaped characters', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle odd number of backslashes before quote', () => {
+  it("should handle odd number of backslashes before quote", () => {
     const input = '{"text":"before\\\\\\\\"}';
     const expected = `{
   "text": "before\\\\\\\\"
@@ -59,7 +59,7 @@ describe('escaped characters', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle escaped backslash followed by escaped quote', () => {
+  it("should handle escaped backslash followed by escaped quote", () => {
     const input = '{"mixed":"test\\\\\\"end"}';
     const expected = `{
   "mixed": "test\\\\\\"end"
@@ -68,8 +68,8 @@ describe('escaped characters', () => {
   });
 });
 
-describe('forward slash escape sequences', () => {
-  it('should decode \\/ escape sequences to forward slashes', () => {
+describe("forward slash escape sequences", () => {
+  it("should decode \\/ escape sequences to forward slashes", () => {
     const input = '{"url":"https:\\/\\/example.com\\/api\\/v1"}';
     const expected = `{
   "url": "https://example.com/api/v1"
@@ -77,7 +77,7 @@ describe('forward slash escape sequences', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle unescaped forward slashes correctly', () => {
+  it("should handle unescaped forward slashes correctly", () => {
     const input = '{"url":"https://example.com/api/v1"}';
     const expected = `{
   "url": "https://example.com/api/v1"
@@ -85,8 +85,9 @@ describe('forward slash escape sequences', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle forward slashes mixed with other escape sequences', () => {
-    const input = '{"text":"line1\\npath\\/to\\/file\\ttab","unicode":"\\u4e16\\u754c\\/path"}';
+  it("should handle forward slashes mixed with other escape sequences", () => {
+    const input =
+      '{"text":"line1\\npath\\/to\\/file\\ttab","unicode":"\\u4e16\\u754c\\/path"}';
     const expected = `{
   "text": "line1\\npath/to/file\\ttab",
   "unicode": "世界/path"
@@ -94,7 +95,7 @@ describe('forward slash escape sequences', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle a single escaped forward slash', () => {
+  it("should handle a single escaped forward slash", () => {
     const input = '{"slash":"\\/"}';
     const expected = `{
   "slash": "/"
@@ -102,7 +103,7 @@ describe('forward slash escape sequences', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle multiple consecutive escaped forward slashes', () => {
+  it("should handle multiple consecutive escaped forward slashes", () => {
     const input = '{"path":"\\/\\/network\\/share"}';
     const expected = `{
   "path": "//network/share"
@@ -110,7 +111,7 @@ describe('forward slash escape sequences', () => {
     assertEqual(input, expected);
   });
 
-  it('should handle escaped forward slash at end of string', () => {
+  it("should handle escaped forward slash at end of string", () => {
     const input = '{"url":"https://example.com\\/"}';
     const expected = `{
   "url": "https://example.com/"
