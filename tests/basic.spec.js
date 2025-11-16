@@ -1,7 +1,7 @@
-const { assertEqual } = require('./utils');
+const { assertEqual } = require("./utils");
 
-describe('basic functionality', () => {
-  it('should format a simple object', () => {
+describe("basic functionality", () => {
+  it("should format a simple object", () => {
     const input = '{"name":"John","age":30}';
     const expected = `{
   "name": "John",
@@ -11,8 +11,8 @@ describe('basic functionality', () => {
     assertEqual(input, expected);
   });
 
-  it('should format a simple array', () => {
-    const input = '[1,2,3,4,5]';
+  it("should format a simple array", () => {
+    const input = "[1,2,3,4,5]";
     const expected = `[
   1,
   2,
@@ -24,7 +24,7 @@ describe('basic functionality', () => {
     assertEqual(input, expected);
   });
 
-  it('should preserve whitespace inside strings', () => {
+  it("should preserve whitespace inside strings", () => {
     const input = '{"text":"Hello   World"}';
     const expected = `{
   "text": "Hello   World"
@@ -33,8 +33,8 @@ describe('basic functionality', () => {
   });
 });
 
-describe('boolean and null values', () => {
-  it('should format boolean values', () => {
+describe("boolean and null values", () => {
+  it("should format boolean values", () => {
     const input = '{"active":true,"deleted":false}';
     const expected = `{
   "active": true,
@@ -43,7 +43,7 @@ describe('boolean and null values', () => {
     assertEqual(input, expected);
   });
 
-  it('should format null values', () => {
+  it("should format null values", () => {
     const input = '{"value":null}';
     const expected = `{
   "value": null
@@ -51,7 +51,7 @@ describe('boolean and null values', () => {
     assertEqual(input, expected);
   });
 
-  it('should format mixed value types', () => {
+  it("should format mixed value types", () => {
     const input = '{"string":"text","number":42,"boolean":true,"null":null}';
     const expected = `{
   "string": "text",
@@ -63,8 +63,8 @@ describe('boolean and null values', () => {
   });
 });
 
-describe('numeric values', () => {
-  it('should format integer values', () => {
+describe("numeric values", () => {
+  it("should format integer values", () => {
     const input = '{"count":100}';
     const expected = `{
   "count": 100
@@ -72,7 +72,7 @@ describe('numeric values', () => {
     assertEqual(input, expected);
   });
 
-  it('should format floating point values', () => {
+  it("should format floating point values", () => {
     const input = '{"price":19.99,"tax":2.5}';
     const expected = `{
   "price": 19.99,
@@ -81,7 +81,7 @@ describe('numeric values', () => {
     assertEqual(input, expected);
   });
 
-  it('should format negative numbers', () => {
+  it("should format negative numbers", () => {
     const input = '{"temperature":-10,"balance":-500.25}';
     const expected = `{
   "temperature": -10,
